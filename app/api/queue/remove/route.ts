@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     host = data?.host_token_hash === createHash('sha256').update(token).digest('hex');
   }
 
-  let query = supabase.from('queue_items').delete().eq('id', itemId).eq('session_id', sessionId).eq('state', 'queued');
+  let query = supabase.from('queue_items').delete().eq('id', itemId).eq('session_id', sessionId).in('state', ['queued', 'playing']);
   if (!host && guestId) {
     query = query.eq('guest_id', guestId);
   }

@@ -266,6 +266,16 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       .catch(() => setNotice('Could not create session.'));
   }
 
+  async function removeCurrentSong() {
+    if (!current || !snapshot?.sessionId) return;
+    try {
+      await apiCall('/api/queue/remove', { sessionId: snapshot.sessionId, itemId: current.id, guestId, token: hostToken });
+      await apiCall('/api/host/skip', { sessionId: snapshot.sessionId, token: hostToken });
+    } catch {
+      setNotice('Could not remove the current song.');
+    }
+  }
+
   function joinRoom(event: React.FormEvent) {
     event.preventDefault();
     if (!routeSessionId) return;
@@ -444,7 +454,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             </section>
           )}
           <section className="queue-panel"><div className="queue-heading"><div><div className="eyebrow"><ListMusic size={13} /> THE SETLIST</div><h2>Up next <span>{queue.length}</span></h2></div><button className="icon-button clear-button" title="Clear queued songs" aria-label="Clear queued songs" onClick={() => apiCall('/api/host/clear', { sessionId: snapshot?.sessionId, token: hostToken })}><Trash2 size={16} /></button></div>
-            {current && <div className="now-playing-row"><img src={current.thumbnail} alt="" /><div><span>ON STAGE</span><strong>{current.title}</strong><small>{current.guestName}’s pick</small></div><div className="playing-bars"><i /><i /><i /><i /></div></div>}
+            {current && <div className="now-playing-row"><img src={current.thumbnail} alt="" /><div><span>ON STAGE</span><strong>{current.title}</strong><small>{current.guestName}’s pick</small></div><div className="playing-bars"><i /><i /><i /><i /></div><button className="icon-button remove-button" onClick={removeCurrentSong} title="Remove current song" aria-label="Remove current song"><X size={16} /></button></div>}
             {queue.length ? <div className="host-queue-list">{queue.map((item, index) => <QueueRow key={item.id} item={item} position={index + 1} onRemove={() => apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId, itemId: item.id, guestId, token: hostToken })} host />)}</div> : !current && <div className="queue-empty host-empty"><ListMusic size={22} /><span>The queue is clear</span><small>Requests appear here in real time.</small></div>}
           </section>
           <div className="room-footnote"><span /> Queue saved on this computer <span className="footnote-separator">·</span> {connected ? 'Live updates on' : 'Reconnecting'}</div>
