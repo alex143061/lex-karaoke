@@ -283,6 +283,14 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         setGuestId(data.guestId || '');
         setJoined(true);
         localStorage.setItem(`lex-karaoke-guest-${routeSessionId}`, JSON.stringify({ id: data.guestId || '', nickname: name }));
+        // Fetch initial snapshot so polling starts
+        fetch(`/api/snapshot/${routeSessionId}`)
+          .then(async (r) => {
+            if (r.ok) {
+              const snap = await r.json();
+              setSnapshot(snap);
+            }
+          });
       })
       .catch(() => setNotice('Could not join session.'));
   }
