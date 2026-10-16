@@ -102,36 +102,47 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       .then(setQrData).catch(() => setQrData(''));
   }, [joinUrl]);
 
-  // Centralized: load + play a video, retrying until YouTube confirms playing/buffering state.
+  // Centralized: wait for player to exist AND be ready, then load + play, retrying until YouTube confirms playing/buffering state.
   const playVideoFor = (videoId: string) => {
-    if (!playerRef.current || !playerReadyRef.current) return;
-    // If it's the same video already loaded, just hit play.
-    if (currentVideoRef.current === videoId) {
-      playerRef.current.playVideo();
-      const state = playerRef.current.getPlayerState?.();
-      if (state === 1 || state === 3) {
-        playedVideoRef.current = true;
+    const stage = () => {
+      // Stage 1: wait for the YT.Player instance to exist.
+      if (!playerRef.current) {
+        setTimeout(stage, 200);
         return;
       }
-    } else {
-      currentVideoRef.current = videoId;
-      playerRef.current.loadVideoById(videoId);
-    }
-    // Retry playVideo every 200ms, up to 50 tries (~10 seconds), until YT reports playing/buffering.
-    let attempts = 0;
-    const attempt = () => {
-      if (!playerRef.current || currentVideoRef.current !== videoId) return;
-      playerRef.current.playVideo();
-      const state = playerRef.current.getPlayerState?.();
-      if (state === 1 || state === 3) {
-        playedVideoRef.current = true;
+      // Stage 2: wait for onReady to have fired.
+      if (!playerReadyRef.current) {
+        setTimeout(stage, 200);
         return;
       }
-      if (++attempts < 50) {
-        setTimeout(attempt, 200);
+      // Stage 3: load (if needed) and play, retry until YT reports playing/buffering.
+      if (currentVideoRef.current === videoId) {
+        playerRef.current.playVideo();
+        const state = playerRef.current.getPlayerState?.();
+        if (state === 1 || state === 3) {
+          playedVideoRef.current = true;
+          return;
+        }
+      } else {
+        currentVideoRef.current = videoId;
+        playerRef.current.loadVideoById(videoId);
       }
+      let attempts = 0;
+      const attempt = () => {
+        if (!playerRef.current || currentVideoRef.current !== videoId) return;
+        playerRef.current.playVideo();
+        const state = playerRef.current.getPlayerState?.();
+        if (state === 1 || state === 3) {
+          playedVideoRef.current = true;
+          return;
+        }
+        if (++attempts < 50) {
+          setTimeout(attempt, 200);
+        }
+      };
+      setTimeout(attempt, 200);
     };
-    setTimeout(attempt, 200);
+    stage();
   };
 
   useEffect(() => {
