@@ -390,7 +390,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button></div>
         {connected && !serviceReady && <p className="notice" role="status">Configure server settings, then refresh the page.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
-        <div className="free-note"><span /> Free database hosting · no paid services</div>
+        <div className="free-note"><span /> Connected to database · no paid services</div>
       </div>
       <div className="welcome-art" aria-hidden="true"><div className="art-ring ring-one" /><div className="art-ring ring-two" /><div className="mic-graphic"><Mic2 size={74} strokeWidth={1.15} /></div><span className="art-note note-one">♪</span><span className="art-note note-two">♫</span><span className="art-label">YOUR<br />NEXT<br />FAVOURITE<br />NIGHT</span></div>
     </section> : <>
