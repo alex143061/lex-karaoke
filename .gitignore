@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+next-env.d.ts
+
+# secrets - NEVER commit your YouTube API key
+.env
+.env.*
+!.env.example
+
+# local database (contains sessions, guests, cached searches)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# misc
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
