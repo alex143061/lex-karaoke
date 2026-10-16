@@ -26,7 +26,6 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   const [nickname, setNickname] = useState('');
   const [guestId, setGuestId] = useState('');
   const [joined, setJoined] = useState(false);
-  const [pin, setPin] = useState('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Song[]>([]);
   const [searchError, setSearchError] = useState('');
@@ -40,7 +39,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   const currentVideoRef = useRef('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Check Supabase configuration status on mount
+  // Check server configuration status on mount
   useEffect(() => {
     fetch('/api/session/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: '' }) })
       .then(async (res) => {
@@ -247,7 +246,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     fetch('/api/session/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify({}),
     })
       .then(async (res) => {
         if (!res.ok) { const err = await res.json(); setNotice(err.error || 'Could not create session.'); return; }
@@ -257,7 +256,6 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         localStorage.setItem(hostStorageKey, JSON.stringify({ sessionId: data.id, token: data.token || '' }));
         setSnapshot(null);
         setJoined(true);
-        setPin('');
       })
       .catch(() => setNotice('Could not create session.'));
   }
@@ -340,8 +338,8 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   if (mode === 'guest') {
     return <main className="guest-shell">
       <header className="guest-header">
-<a className="brand" href="/"><span className="brand-mark"><Mic2 size={18} /></span><span>lex-karaoke</span></a>
-        <span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Supabase ready' : 'Supabase not configured'}</span>
+      <a className="brand" href="/"><span className="brand-mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M9.5 13.5v.01"/></svg></span><span>lex-karaoke</span></a>
+        <span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Server connected' : 'Server not ready'}</span>
       </header>
       {!joined ? <section className="join-panel">
         <div className="eyebrow"><Smartphone size={14} /> ROOM INVITE</div>
@@ -352,7 +350,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
           <input id="nickname" maxLength={24} placeholder="e.g. Jules" value={nickname} onChange={(event) => setNickname(event.target.value)} required />
           <button className="button button-lime button-wide" disabled={!serviceReady}><Mic2 size={17} /> Join the room</button>
         </form>
-        {connected && !serviceReady && <p className="notice" role="status">The host needs to configure its Supabase project before this room can be used.</p>}
+        {connected && !serviceReady && <p className="notice" role="status">The server needs to be configured before this room can be used.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
       </section> : <>
         <section className="guest-now">
@@ -384,15 +382,15 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
 
   return <main className="host-shell">
     <header className="host-header">
-      <a className="brand" href="/"><span className="brand-mark"><Mic2 size={18} /></span><span>lex-karaoke</span></a>
-      <div className="header-meta"><span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Supabase ready' : 'Supabase not configured'}</span></div>
+      <a className="brand" href="/"><span className="brand-mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M9.5 13.5v.01"/></svg></span><span>lex-karaoke</span></a>
+      <div className="header-meta"><span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Server connected' : 'Server not ready'}</span></div>
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
         <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button></div>
-        {connected && !serviceReady && <p className="notice" role="status">Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env, then restart the server.</p>}
+        {connected && !serviceReady && <p className="notice" role="status">Configure server settings, then refresh the page.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
-        <div className="free-note"><span /> Supabase Free database · no paid hosting</div>
+        <div className="free-note"><span /> Free database hosting · no paid services</div>
       </div>
       <div className="welcome-art" aria-hidden="true"><div className="art-ring ring-one" /><div className="art-ring ring-two" /><div className="mic-graphic"><Mic2 size={74} strokeWidth={1.15} /></div><span className="art-note note-one">♪</span><span className="art-note note-two">♫</span><span className="art-label">YOUR<br />NEXT<br />FAVOURITE<br />NIGHT</span></div>
     </section> : <>

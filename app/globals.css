@@ -24,8 +24,8 @@ a { color: inherit; text-decoration: none; }
 .host-shell { padding: 0 24px 24px; margin: 0 auto; max-width: none; width: 100%; }
 .guest-shell { padding: 0 16px 40px; margin: 0 auto; max-width: none; width: 100%; background-color: #111a1a; }
 .host-header, .guest-header { height: 78px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(201,222,212,.12); }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; font-size: 19px; letter-spacing: 0; }
-.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; color: var(--ink); background: var(--lime); border-radius: 10px 10px 10px 3px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.5px; }
+.brand-mark { display: grid; place-items: center; width: 40px; height: 40px; color: var(--ink); background: var(--lime); border-radius: 12px 12px 12px 4px; box-shadow: 0 4px 12px rgba(216,245,106,.35); }
 .brand-period { color: var(--coral); }
 .header-meta { display: flex; align-items: center; gap: 22px; }
 .connection { display: inline-flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
