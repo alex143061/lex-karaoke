@@ -102,12 +102,13 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   }, [joinUrl]);
 
   useEffect(() => {
-    if (mode !== 'host' || !snapshot?.current || !playerReadyRef.current || !playerRef.current) return;
+    if (mode !== 'host' || !snapshot?.current || !playerRef.current) return;
     const videoId = snapshot.current.videoId;
     if (currentVideoRef.current !== videoId) {
       currentVideoRef.current = videoId;
       playerRef.current.loadVideoById(videoId);
-      playerRef.current.playVideo();
+      // YouTube needs a moment after loadVideoById before playVideo will work
+      setTimeout(() => { playerRef.current?.playVideo(); }, 150);
     }
   }, [mode, snapshot?.current?.videoId]);
 
@@ -126,7 +127,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             if (videoId && playerRef.current) {
               currentVideoRef.current = videoId;
               playerRef.current.loadVideoById(videoId);
-              playerRef.current.playVideo();
+              setTimeout(() => { playerRef.current?.playVideo(); }, 150);
             }
           },
           onStateChange: (event: { data: number }) => {
