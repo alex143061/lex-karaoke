@@ -487,7 +487,17 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
-        <div className="host-setup"><label className="search-box"><span>Host PIN</span><input value={hostPin} onChange={(e) => setHostPin(e.target.value)} type="password" placeholder="Enter host PIN" aria-label="Host PIN" /><span>â†µ</span></label><button className="button button-lime" onClick={createRoom} disabled={!serviceReady || !hostPin}><Mic2 size={17} /> Start a session</button></div>
+        <div className="host-setup" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <input
+            type="password"
+            placeholder="Enter the pin here"
+            value={hostPin}
+            onChange={(e) => setHostPin(e.target.value)}
+            aria-label="Host PIN"
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,.18)", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 16, outline: "none" }}
+          />
+          <button className="button button-lime" onClick={createRoom} disabled={!serviceReady || !hostPin} style={{ padding: "10px 20px", fontSize: 16 }}><Mic2 size={17} /> Start a session</button>
+        </div>
         {connected && !serviceReady && <p className="notice" role="status">Configure server settings, then refresh the page.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         <div className="free-note"><span /> Connected to database · no paid services</div>
