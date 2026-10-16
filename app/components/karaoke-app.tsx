@@ -107,6 +107,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     if (currentVideoRef.current !== videoId) {
       currentVideoRef.current = videoId;
       playerRef.current.loadVideoById(videoId);
+      playerRef.current.playVideo();
     }
   }, [mode, snapshot?.current?.videoId]);
 
@@ -125,6 +126,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             if (videoId && playerRef.current) {
               currentVideoRef.current = videoId;
               playerRef.current.loadVideoById(videoId);
+              playerRef.current.playVideo();
             }
           },
           onStateChange: (event: { data: number }) => {
