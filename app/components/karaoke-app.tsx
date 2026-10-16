@@ -1,6 +1,5 @@
 'use client';
 
-import { io, type Socket } from 'socket.io-client';
 import QRCode from 'qrcode';
 import { Disc3, ListMusic, LoaderCircle, Mic2, Play, Plus, Radio, Search, SkipForward, Smartphone, Trash2, Users, Volume2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -16,10 +15,8 @@ type Props = { mode: 'host' | 'guest'; sessionId?: string };
 declare global { interface Window { YT?: PlayerApi; onYouTubeIframeAPIReady?: () => void } }
 
 const hostStorageKey = 'lex-karaoke-host';
-const wsUrl = process.env.NEXT_PUBLIC_WS_URL || '';
 
 export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [hostToken, setHostToken] = useState('');
   const [joinUrl, setJoinUrl] = useState('');
@@ -41,59 +38,84 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   const playerNodeRef = useRef<HTMLDivElement>(null);
   const playerReadyRef = useRef(false);
   const currentVideoRef = useRef('');
-  const socketRef = useRef<Socket | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check Supabase configuration status on mount
+  useEffect(() => {
+    fetch('/api/session/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: '' }) })
+      .then(async (res) => {
+        if (res.status === 500) setServiceReady(false);
+        else setServiceReady(true);
+      })
+      .catch(() => setServiceReady(false));
+  }, []);
 
   useEffect(() => {
-    const connection = io({ autoConnect: false });
-    socketRef.current = connection;
-    setSocket(connection);
-    connection.on('connect', () => setConnected(true));
-    connection.on('disconnect', () => setConnected(false));
-    connection.on('server:status', (status: { supabaseConfigured: boolean }) => setServiceReady(status.supabaseConfigured));
-    connection.on('state:update', (state: Snapshot) => setSnapshot(state));
-    connection.on('session:closed', () => {
-      setJoined(false);
-      setSnapshot(null);
-      setNotice('The host has closed this session.');
-      if (mode === 'host') localStorage.removeItem(hostStorageKey);
-    });
-    connection.connect();
-    return () => { connection.disconnect(); socketRef.current = null; };
-  }, [mode]);
-
-  useEffect(() => {
-    if (!socket || !connected) return;
-    if (mode === 'host') {
-      const stored = localStorage.getItem(hostStorageKey);
-      if (!stored) return;
+    if (!joined || !snapshot?.sessionId) return;
+    const id = snapshot.sessionId;
+    pollRef.current = setInterval(async () => {
       try {
-        const session = JSON.parse(stored) as { sessionId: string; token: string };
-        socket.emit('session:restore', session, (reply: Snapshot & { hostToken?: string; joinUrl?: string; error?: string }) => {
-          if (reply.error) {
-            localStorage.removeItem(hostStorageKey);
-            return;
-          }
-          setSnapshot(reply);
-          setHostToken(session.token);
-          setJoinUrl(reply.joinUrl || '');
-          setJoined(true);
-        });
-      } catch { localStorage.removeItem(hostStorageKey); }
-      return;
-    }
-    const saved = localStorage.getItem(`lex-karaoke-guest-${routeSessionId}`);
-    if (!saved) return;
+        const res = await fetch(`/api/snapshot/${id}`);
+        if (res.status === 404) {
+          setJoined(false);
+          setSnapshot(null);
+          setNotice('The host has closed this session.');
+          if (mode === 'host') localStorage.removeItem(hostStorageKey);
+          return;
+        }
+        const data: Snapshot = await res.json();
+        setSnapshot(data);
+        setConnected(true);
+      } catch {
+        setConnected(false);
+      }
+    }, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [joined, snapshot?.sessionId, mode]);
+
+  useEffect(() => {
+    if (mode !== 'host' || joined) return;
+    const stored = localStorage.getItem(hostStorageKey);
+    if (!stored) return;
     try {
-      const identity = JSON.parse(saved) as { id: string; nickname: string };
-      setNickname(identity.nickname);
-      socket.emit('session:join', { sessionId: routeSessionId, guestId: identity.id, nickname: identity.nickname }, (reply: Snapshot & { guestId?: string; error?: string }) => {
-        if (reply.error) { setNotice(reply.error); return; }
-        setGuestId(reply.guestId || identity.id);
-        setSnapshot(reply);
-        setJoined(true);
-      });
+      const session = JSON.parse(stored) as { sessionId: string; token: string };
+      fetch('/api/session/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.sessionId, token: session.token }),
+      })
+        .then(async (res) => {
+          if (!res.ok) { localStorage.removeItem(hostStorageKey); return; }
+          const data = await res.json();
+          setSnapshot(data);
+          setHostToken(data.hostToken || '');
+          setJoinUrl(data.joinUrl || `${window.location.origin}/join/${data.sessionId}`);
+          setJoined(true);
+        })
+        .catch(() => localStorage.removeItem(hostStorageKey));
+    } catch { localStorage.removeItem(hostStorageKey); }
+  }, [mode, joined]);
+
+  useEffect(() => {
+    if (mode !== 'guest' || joined || !routeSessionId) return;
+    const stored = localStorage.getItem(`lex-karaoke-guest-${routeSessionId}`);
+    if (!stored) return;
+    try {
+      const guest = JSON.parse(stored) as { id: string; nickname: string };
+      fetch('/api/session/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: routeSessionId, guestId: guest.id, guestName: guest.nickname }),
+      })
+        .then(async (res) => {
+          if (!res.ok) { localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`); return; }
+          const data = await res.json();
+          setGuestId(data.guestId || guest.id);
+          setJoined(true);
+        })
+        .catch(() => localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`));
     } catch { localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`); }
-  }, [socket, connected, mode, routeSessionId]);
+  }, [mode, joined, routeSessionId]);
 
   useEffect(() => {
     if (!joinUrl) { setQrData(''); return; }
@@ -129,8 +151,20 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
           },
           onStateChange: (event: { data: number }) => {
             const state = event.data === 1 ? 'playing' : event.data === 3 ? 'buffering' : 'paused';
-            socketRef.current?.emit('host:playback', { token: hostToken, state });
-            if (event.data === 0) socketRef.current?.emit('host:skip', { token: hostToken }, (reply: SearchReply) => { if (reply.error) setNotice(reply.error); });
+            if (mode === 'host' && hostToken && snapshot?.sessionId) {
+              fetch('/api/host/playback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: snapshot.sessionId, token: hostToken, state }),
+              }).catch(() => {});
+            }
+            if (event.data === 0) {
+              fetch('/api/host/skip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: snapshot?.sessionId, token: hostToken }),
+              }).catch(() => {});
+            }
           },
           onError: (event: { data: number }) => {
             const errorMessages: Record<number, string> = {
@@ -142,7 +176,13 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             };
             const msg = errorMessages[event.data] || `Player error ${event.data}`;
             setNotice(`${msg}. Skipping to the next request.`);
-            socketRef.current?.emit('host:skip', { token: hostToken });
+            if (mode === 'host' && hostToken && snapshot?.sessionId) {
+              fetch('/api/host/skip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: snapshot.sessionId, token: hostToken }),
+              }).catch(() => {});
+            }
           },
         },
       }) as unknown as Player;
@@ -168,65 +208,130 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   }, [mode, hostToken]);
 
   useEffect(() => {
-    if (!socket || query.trim().length < 2) {
+    if (!joined || query.trim().length < 2) {
       setResults([]);
       setSearchError('');
       return;
     }
-    if (!joined) return;
-    const timer = window.setTimeout(() => {
+    const timer = window.setTimeout(async () => {
       setLoading(true);
-      socket.emit('search', { sessionId: routeSessionId || snapshot?.sessionId, query }, (reply: SearchReply) => {
-        setResults(reply.results || []);
-        setCachedResults(Boolean(reply.cached));
-        setSearchError(reply.error || '');
-        setLoading(false);
-      });
+      try {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: snapshot?.sessionId || routeSessionId || '', query }),
+        });
+        const data: SearchReply = await res.json();
+        setResults(data.results || []);
+        setCachedResults(Boolean(data.cached));
+        setSearchError(data.error || '');
+      } catch {
+        setSearchError('Search failed.');
+      }
+      setLoading(false);
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [mode, joined, socket, query, routeSessionId, snapshot?.sessionId]);
+  }, [joined, query, snapshot?.sessionId, routeSessionId]);
 
-  function emitAck(event: string, payload: object, onSuccess?: (reply: SearchReply) => void) {
-    socket?.emit(event, payload, (reply: SearchReply) => {
-      if (reply.error) setNotice(reply.error);
-      else { setNotice(''); onSuccess?.(reply); }
+  async function apiCall(path: string, body: any) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
+    return res.json();
   }
 
   function createRoom() {
     setNotice('');
-    emitAck('session:create', { pin }, (reply) => {
-      const response = reply as SearchReply & Snapshot & { hostToken?: string; joinUrl?: string };
-      if (!response.sessionId || !response.hostToken) return;
-      localStorage.setItem(hostStorageKey, JSON.stringify({ sessionId: response.sessionId, token: response.hostToken }));
-      setHostToken(response.hostToken);
-      setSnapshot(response);
-      setJoinUrl(response.joinUrl || '');
-      setJoined(true);
-      setPin('');
-    });
+    fetch('/api/session/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    })
+      .then(async (res) => {
+        if (!res.ok) { const err = await res.json(); setNotice(err.error || 'Could not create session.'); return; }
+        const data = await res.json();
+        setHostToken(data.hostToken || '');
+        setJoinUrl(data.joinUrl || `${window.location.origin}/join/${data.id}`);
+        localStorage.setItem(hostStorageKey, JSON.stringify({ sessionId: data.id, token: data.token || '' }));
+        setSnapshot(null);
+        setJoined(true);
+        setPin('');
+      })
+      .catch(() => setNotice('Could not create session.'));
   }
 
   function joinRoom(event: React.FormEvent) {
     event.preventDefault();
-    if (!socket || !routeSessionId) return;
-    const saved = localStorage.getItem(`lex-karaoke-guest-${routeSessionId}`);
-    const priorId = saved ? (JSON.parse(saved) as { id?: string }).id : undefined;
-    emitAck('session:join', { sessionId: routeSessionId, nickname, guestId: priorId }, (reply) => {
-      const response = reply as SearchReply & Snapshot & { guestId?: string };
-      if (!response.guestId) return;
-      localStorage.setItem(`lex-karaoke-guest-${routeSessionId}`, JSON.stringify({ id: response.guestId, nickname: nickname.trim() }));
-      setGuestId(response.guestId);
-      setSnapshot(response);
-      setJoined(true);
-      setNotice('');
-    });
+    if (!routeSessionId) return;
+    const name = nickname.trim();
+    if (!name) { setNotice('Please enter your name.'); return; }
+    fetch('/api/session/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: routeSessionId, guestId: crypto.randomUUID(), guestName: name }),
+    })
+      .then(async (res) => {
+        if (!res.ok) { const err = await res.json(); setNotice(err.error || 'Could not join session.'); return; }
+        const data = await res.json();
+        setGuestId(data.guestId || '');
+        setJoined(true);
+        localStorage.setItem(`lex-karaoke-guest-${routeSessionId}`, JSON.stringify({ id: data.guestId || '', nickname: name }));
+      })
+      .catch(() => setNotice('Could not join session.'));
   }
 
   function requestSong(song: Song) {
     setBusyId(song.videoId);
-    emitAck('queue:add', { song }, () => setNotice(`Added “${song.title}” to the queue.`));
-    window.setTimeout(() => setBusyId(''), 700);
+    apiCall('/api/queue/add', { sessionId: snapshot?.sessionId, guestId, guestName: nickname, song, token: hostToken })
+      .then((reply: any) => {
+        if (reply.error) setNotice(reply.error);
+        else setNotice(`Added “${song.title}” to the queue.`);
+      })
+      .finally(() => { window.setTimeout(() => setBusyId(''), 700); });
+  }
+
+  function removeSong(itemId: string) {
+    apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId, itemId, guestId, token: hostToken })
+      .then((reply: any) => {
+        if (reply.error) setNotice(reply.error);
+        else setNotice('Removed from queue.');
+      });
+  }
+
+  function clearQueue() {
+    apiCall('/api/host/clear', { sessionId: snapshot?.sessionId, token: hostToken })
+      .then((reply: any) => {
+        if (reply.error) setNotice(reply.error);
+        else setNotice('Queue cleared.');
+      });
+  }
+
+  function skipSong() {
+    apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })
+      .then((reply: any) => {
+        if (reply.error) setNotice(reply.error);
+        else setNotice('Skipping song.');
+      });
+  }
+
+  function setPlayback(state: string) {
+    apiCall('/api/host/playback', { sessionId: snapshot?.sessionId, token: hostToken, state });
+  }
+
+  function closeSession() {
+    if (!window.confirm('Close this session? All queued songs will be cleared.')) return;
+    apiCall('/api/host/close', { sessionId: snapshot?.sessionId, token: hostToken })
+      .then((reply: any) => {
+        if (reply.error) setNotice(reply.error);
+        else {
+          setJoined(false);
+          setSnapshot(null);
+          setNotice('Session closed.');
+          localStorage.removeItem(hostStorageKey);
+        }
+      });
   }
 
   const current = snapshot?.current;
@@ -270,7 +375,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         </section>
         <section className="guest-queue">
           <div className="section-heading"><div><span className="eyebrow">THE LINEUP</span><h2>Coming up</h2></div><ListMusic size={19} /></div>
-          {queue.length ? queue.map((item, index) => <QueueRow key={item.id} item={item} position={index + 1} onRemove={() => emitAck('queue:remove', { itemId: item.id })} />) : <p className="queue-empty">No requests yet. Start the set.</p>}
+          {queue.length ? queue.map((item, index) => <QueueRow key={item.id} item={item} position={index + 1} onRemove={() => apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId, itemId: item.id, guestId })} />) : <p className="queue-empty">No requests yet. Start the set.</p>}
         </section>
       </>}
       {notice && joined && <div className="toast" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
@@ -291,11 +396,11 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       </div>
       <div className="welcome-art" aria-hidden="true"><div className="art-ring ring-one" /><div className="art-ring ring-two" /><div className="mic-graphic"><Mic2 size={74} strokeWidth={1.15} /></div><span className="art-note note-one">♪</span><span className="art-note note-two">♫</span><span className="art-label">YOUR<br />NEXT<br />FAVOURITE<br />NIGHT</span></div>
     </section> : <>
-      <div className="dashboard-title"><div><div className="eyebrow">THE HOST BOOTH <span className="title-dot">/</span> ROOM {snapshot.sessionId.slice(0, 6).toUpperCase()}</div><h1>Tonight’s set</h1></div><button className="button button-outline" onClick={() => emitAck('host:close', { token: hostToken }, () => { localStorage.removeItem(hostStorageKey); setSnapshot(null); setHostToken(''); setJoinUrl(''); })}><X size={16} /> End session</button></div>
+      <div className="dashboard-title"><div><div className="eyebrow">THE HOST BOOTH <span className="title-dot">/</span> ROOM {snapshot.sessionId.slice(0, 6).toUpperCase()}</div><h1>Tonight’s set</h1></div><button className="button button-outline" onClick={() => { apiCall('/api/host/close', { sessionId: snapshot?.sessionId, token: hostToken }).then(() => { localStorage.removeItem(hostStorageKey); setSnapshot(null); setHostToken(''); setJoinUrl(''); }); }}><X size={16} /> End session</button></div>
       <div className="dashboard-grid">
         <section className="player-column">
           <div className="player-frame"><div ref={playerNodeRef} className="youtube-player" />{!current && <div className="player-placeholder"><div className="placeholder-disc"><Disc3 size={38} /></div><span>THE STAGE IS YOURS</span><strong>{queue.length ? 'Ready for the first song?' : 'Waiting for a request'}</strong><p>{queue.length ? 'Start the set when everyone is ready.' : 'Scan the room QR to add songs.'}</p></div>}</div>
-          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={() => current ? playerRef.current?.playVideo() : emitAck('host:skip', { token: hostToken })}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => emitAck('host:skip', { token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
+          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={() => current ? playerRef.current?.playVideo() : apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
           {notice && <div className="host-notice" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14} /></button></div>}
         </section>
         <aside className="right-column">
@@ -326,9 +431,9 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
               </ul>
             </section>
           )}
-          <section className="queue-panel"><div className="queue-heading"><div><div className="eyebrow"><ListMusic size={13} /> THE SETLIST</div><h2>Up next <span>{queue.length}</span></h2></div><button className="icon-button clear-button" title="Clear queued songs" aria-label="Clear queued songs" onClick={() => emitAck('host:clear', { token: hostToken })}><Trash2 size={16} /></button></div>
+          <section className="queue-panel"><div className="queue-heading"><div><div className="eyebrow"><ListMusic size={13} /> THE SETLIST</div><h2>Up next <span>{queue.length}</span></h2></div><button className="icon-button clear-button" title="Clear queued songs" aria-label="Clear queued songs" onClick={() => apiCall('/api/host/clear', { sessionId: snapshot?.sessionId, token: hostToken })}><Trash2 size={16} /></button></div>
             {current && <div className="now-playing-row"><img src={current.thumbnail} alt="" /><div><span>ON STAGE</span><strong>{current.title}</strong><small>{current.guestName}’s pick</small></div><div className="playing-bars"><i /><i /><i /><i /></div></div>}
-            {queue.length ? <div className="host-queue-list">{queue.map((item, index) => <QueueRow key={item.id} item={item} position={index + 1} onRemove={() => emitAck('queue:remove', { itemId: item.id, token: hostToken })} host />)}</div> : !current && <div className="queue-empty host-empty"><ListMusic size={22} /><span>The queue is clear</span><small>Requests appear here in real time.</small></div>}
+            {queue.length ? <div className="host-queue-list">{queue.map((item, index) => <QueueRow key={item.id} item={item} position={index + 1} onRemove={() => apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId, itemId: item.id, guestId, token: hostToken })} host />)}</div> : !current && <div className="queue-empty host-empty"><ListMusic size={22} /><span>The queue is clear</span><small>Requests appear here in real time.</small></div>}
           </section>
           <div className="room-footnote"><span /> Queue saved on this computer <span className="footnote-separator">·</span> {connected ? 'Live updates on' : 'Reconnecting'}</div>
         </aside>
