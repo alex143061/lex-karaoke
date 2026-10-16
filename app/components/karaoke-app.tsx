@@ -41,10 +41,10 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
 
   // Check server configuration status on mount
   useEffect(() => {
-    fetch('/api/session/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: '' }) })
+    fetch('/api/health')
       .then(async (res) => {
-        if (res.status === 500) setServiceReady(false);
-        else setServiceReady(true);
+        const data = await res.json();
+        setServiceReady(Boolean(data.configured));
       })
       .catch(() => setServiceReady(false));
   }, []);
@@ -254,8 +254,15 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         setHostToken(data.hostToken || '');
         setJoinUrl(data.joinUrl || `${window.location.origin}/join/${data.id}`);
         localStorage.setItem(hostStorageKey, JSON.stringify({ sessionId: data.id, token: data.token || '' }));
-        setSnapshot(null);
         setJoined(true);
+        // Fetch initial snapshot so polling starts
+        fetch(`/api/snapshot/${data.id}`)
+          .then(async (r) => {
+            if (r.ok) {
+              const snap = await r.json();
+              setSnapshot(snap);
+            }
+          });
       })
       .catch(() => setNotice('Could not create session.'));
   }
