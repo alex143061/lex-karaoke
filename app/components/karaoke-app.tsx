@@ -389,7 +389,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
-        <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button><label className="pin-input"><span>Host PIN</span><input type="password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="Only if configured" autoComplete="off" /></label></div>
+        <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button></div>
         {connected && !serviceReady && <p className="notice" role="status">Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env, then restart the server.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         <div className="free-note"><span /> Supabase Free database · no paid hosting</div>
