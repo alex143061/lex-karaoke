@@ -23,6 +23,12 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   requireSupabase();
+  const body = await request.json();
+  const pin = body.pin;
+  const expectedPin = process.env.host_pin || '1234';
+  if (pin !== expectedPin) {
+    return NextResponse.json({ error: 'Invalid PIN.' }, { status: 403 });
+  }
   const id = randomBytes(18).toString('base64url');
   const token = randomBytes(32).toString('base64url');
   const { error } = await supabase.from('karaoke_sessions').insert({

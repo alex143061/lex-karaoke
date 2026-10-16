@@ -33,6 +33,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   const [busyId, setBusyId] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hostPin, setHostPin] = useState('');
   const playerRef = useRef<Player | null>(null);
   const playerNodeRef = useRef<HTMLDivElement>(null);
   const playerReadyRef = useRef(false);
@@ -313,10 +314,14 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
 
   function createRoom() {
     setNotice('');
+    if (!hostPin) {
+      setNotice('Please enter the host PIN.');
+      return;
+    }
     fetch('/api/session/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ pin: hostPin }),
     })
       .then(async (res) => {
         if (!res.ok) { const err = await res.json(); setNotice(err.error || 'Could not create session.'); return; }
@@ -482,7 +487,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
-        <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button></div>
+        <div className="host-setup"><label className="search-box"><span>Host PIN</span><input value={hostPin} onChange={(e) => setHostPin(e.target.value)} type="password" placeholder="Enter host PIN" aria-label="Host PIN" /><span>â†µ</span></label><button className="button button-lime" onClick={createRoom} disabled={!serviceReady || !hostPin}><Mic2 size={17} /> Start a session</button></div>
         {connected && !serviceReady && <p className="notice" role="status">Configure server settings, then refresh the page.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         <div className="free-note"><span /> Connected to database · no paid services</div>
