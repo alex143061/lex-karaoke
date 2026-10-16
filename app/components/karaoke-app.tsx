@@ -96,27 +96,6 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   }, [mode, joined]);
 
   useEffect(() => {
-    if (mode !== 'guest' || joined || !routeSessionId) return;
-    const stored = localStorage.getItem(`lex-karaoke-guest-${routeSessionId}`);
-    if (!stored) return;
-    try {
-      const guest = JSON.parse(stored) as { id: string; nickname: string };
-      fetch('/api/session/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: routeSessionId, guestId: guest.id, guestName: guest.nickname }),
-      })
-        .then(async (res) => {
-          if (!res.ok) { localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`); return; }
-          const data = await res.json();
-          setGuestId(data.guestId || guest.id);
-          setJoined(true);
-        })
-        .catch(() => localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`));
-    } catch { localStorage.removeItem(`lex-karaoke-guest-${routeSessionId}`); }
-  }, [mode, joined, routeSessionId]);
-
-  useEffect(() => {
     if (!joinUrl) { setQrData(''); return; }
     QRCode.toDataURL(joinUrl, { width: 256, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#101919', light: '#ffffff' } })
       .then(setQrData).catch(() => setQrData(''));
