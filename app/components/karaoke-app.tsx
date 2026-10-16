@@ -102,47 +102,97 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       .then(setQrData).catch(() => setQrData(''));
   }, [joinUrl]);
 
+  const [playbackError, setPlaybackError] = useState('');
+
   // Centralized: wait for player to exist AND be ready, then load + play, retrying until YouTube confirms playing/buffering state.
   const playVideoFor = (videoId: string) => {
+    setPlaybackError('');
     const stage = () => {
-      // Stage 1: wait for the YT.Player instance to exist.
-      if (!playerRef.current) {
-        setTimeout(stage, 200);
-        return;
-      }
-      // Stage 2: wait for onReady to have fired.
-      if (!playerReadyRef.current) {
-        setTimeout(stage, 200);
-        return;
-      }
-      // Stage 3: load (if needed) and play, retry until YT reports playing/buffering.
-      if (currentVideoRef.current === videoId) {
-        playerRef.current.playVideo();
-        const state = playerRef.current.getPlayerState?.();
-        if (state === 1 || state === 3) {
-          playedVideoRef.current = true;
+      try {
+        // Stage 1: wait for the YT.Player instance to exist.
+        if (!playerRef.current) {
+          setTimeout(stage, 200);
           return;
         }
-      } else {
-        currentVideoRef.current = videoId;
-        playerRef.current.loadVideoById(videoId);
-      }
-      let attempts = 0;
-      const attempt = () => {
-        if (!playerRef.current || currentVideoRef.current !== videoId) return;
-        playerRef.current.playVideo();
-        const state = playerRef.current.getPlayerState?.();
-        if (state === 1 || state === 3) {
-          playedVideoRef.current = true;
+        // Stage 2: wait for onReady to have fired.
+        if (!playerReadyRef.current) {
+          setTimeout(stage, 200);
           return;
         }
-        if (++attempts < 50) {
-          setTimeout(attempt, 200);
+        // Stage 3: load (if needed) and play, retry until YT reports playing/buffering.
+        if (currentVideoRef.current === videoId) {
+          playerRef.current.playVideo();
+          const state = playerRef.current.getPlayerState?.();
+          if (state === 1 || state === 3) {
+            playedVideoRef.current = true;
+            return;
+          }
+        } else {
+          currentVideoRef.current = videoId;
+          playerRef.current.loadVideoById(videoId);
         }
-      };
-      setTimeout(attempt, 200);
+        let attempts = 0;
+        const attempt = () => {
+          try {
+            if (!playerRef.current || currentVideoRef.current !== videoId) return;
+            playerRef.current.playVideo();
+            const state = playerRef.current.getPlayerState?.();
+            if (state === 1 || state === 3) {
+              playedVideoRef.current = true;
+              return;
+            }
+            if (++attempts < 100) {
+              setTimeout(attempt, 200);
+            } else {
+              setPlaybackError('YouTube player is not responding. Try refreshing.');
+            }
+          } catch {
+            setPlaybackError('YouTube player error. Try refreshing.');
+          }
+        };
+        setTimeout(attempt, 200);
+      } catch {
+        setPlaybackError('YouTube player error. Try refreshing.');
+      }
     };
     stage();
+  };
+
+  // Fast-poll for current song after skip, then play it immediately.
+  const playNextSong = async () => {
+    if (!snapshot?.sessionId || !hostToken) return;
+    setPlaybackError('');
+    try {
+      await apiCall('/api/host/skip', { sessionId: snapshot.sessionId, token: hostToken });
+    } catch {
+      setPlaybackError('Could not skip to next song.');
+      return;
+    }
+    // Fast-poll for up to 10 seconds for current to appear.
+    let tries = 0;
+    const waitForCurrent = () => {
+      const c = snapshot?.current;
+      if (c?.videoId) {
+        playVideoFor(c.videoId);
+        return;
+      }
+      if (++tries < 20) {
+        setTimeout(waitForCurrent, 500);
+      } else {
+        setPlaybackError('Next song did not start. Try refreshing.');
+      }
+    };
+    setTimeout(waitForCurrent, 500);
+  };
+
+  const handlePlayClick = () => {
+    if (!snapshot?.sessionId || !hostToken) return;
+    const c = snapshot?.current;
+    if (c?.videoId) {
+      playVideoFor(c.videoId);
+    } else {
+      playNextSong();
+    }
   };
 
   useEffect(() => {
@@ -443,8 +493,9 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       <div className="dashboard-grid">
         <section className="player-column">
           <div className="player-frame"><div ref={playerNodeRef} className="youtube-player" />{!current && <div className="player-placeholder"><div className="placeholder-disc"><Disc3 size={38} /></div><span>THE STAGE IS YOURS</span><strong>{queue.length ? 'Ready for the first song?' : 'Waiting for a request'}</strong><p>{queue.length ? 'Start the set when everyone is ready.' : 'Scan the room QR to add songs.'}</p></div>}</div>
-          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={() => current ? playVideoFor(current.videoId) : apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
+          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={handlePlayClick}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
           {notice && <div className="host-notice" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14} /></button></div>}
+          {playbackError && <div className="host-notice" role="status" style={{ color: '#ef4444' }}>{playbackError}<button onClick={() => setPlaybackError('')} aria-label="Dismiss"><X size={14} /></button></div>}
         </section>
         <aside className="right-column">
           <section className="search-section">
