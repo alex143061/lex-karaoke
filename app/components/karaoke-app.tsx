@@ -284,7 +284,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
 
   function requestSong(song: Song) {
     setBusyId(song.videoId);
-    apiCall('/api/queue/add', { sessionId: snapshot?.sessionId, guestId, guestName: nickname, song, token: hostToken })
+    apiCall('/api/queue/add', { sessionId: snapshot?.sessionId || routeSessionId, guestId, guestName: nickname, song, token: hostToken })
       .then((reply: any) => {
         if (reply.error) setNotice(reply.error);
         else setNotice(`Added “${song.title}” to the queue.`);
@@ -293,7 +293,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   }
 
   function removeSong(itemId: string) {
-    apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId, itemId, guestId, token: hostToken })
+    apiCall('/api/queue/remove', { sessionId: snapshot?.sessionId || routeSessionId, itemId, guestId, token: hostToken })
       .then((reply: any) => {
         if (reply.error) setNotice(reply.error);
         else setNotice('Removed from queue.');
