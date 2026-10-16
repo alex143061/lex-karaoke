@@ -8,7 +8,7 @@ type Song = { videoId: string; title: string; channel: string; thumbnail: string
 type QueueItem = Song & { id: string; guestName: string; requestedByMe?: boolean; state: 'queued' | 'playing' };
 type Snapshot = { sessionId: string; playbackState: string; current: QueueItem | null; queue: QueueItem[] };
 type SearchReply = { results?: Song[]; cached?: boolean; error?: string; ok?: boolean };
-type Player = { loadVideoById: (id: string) => void; playVideo: () => void; pauseVideo: () => void; destroy: () => void };
+type Player = { loadVideoById: (id: string) => void; playVideo: () => void; pauseVideo: () => void; destroy: () => void; getPlayerState: () => number };
 type PlayerApi = { Player: new (element: HTMLElement, options: Record<string, unknown>) => Player };
 type Props = { mode: 'host' | 'guest'; sessionId?: string };
 
@@ -102,13 +102,22 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   }, [joinUrl]);
 
   useEffect(() => {
-    if (mode !== 'host' || !snapshot?.current || !playerRef.current) return;
+    if (mode !== 'host' || !snapshot?.current || !playerRef.current || !playerReadyRef.current) return;
     const videoId = snapshot.current.videoId;
     if (currentVideoRef.current !== videoId) {
       currentVideoRef.current = videoId;
       playerRef.current.loadVideoById(videoId);
-      // YouTube needs a moment after loadVideoById before playVideo will work
-      setTimeout(() => { playerRef.current?.playVideo(); }, 150);
+      // YouTube needs time after loadVideoById before playVideo will work.
+      // Retry up to 20 times (2 seconds) until the player reports playing state.
+      let attempts = 0;
+      const tryPlay = () => {
+        playerRef.current?.playVideo();
+        const state = playerRef.current?.getPlayerState?.();
+        if (state !== 1 && ++attempts < 20) {
+          setTimeout(tryPlay, 100);
+        }
+      };
+      setTimeout(tryPlay, 100);
     }
   }, [mode, snapshot?.current?.videoId]);
 
@@ -127,7 +136,15 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             if (videoId && playerRef.current) {
               currentVideoRef.current = videoId;
               playerRef.current.loadVideoById(videoId);
-              setTimeout(() => { playerRef.current?.playVideo(); }, 150);
+              let attempts = 0;
+              const tryPlay = () => {
+                playerRef.current?.playVideo();
+                const state = playerRef.current?.getPlayerState?.();
+                if (state !== 1 && ++attempts < 20) {
+                  setTimeout(tryPlay, 100);
+                }
+              };
+              setTimeout(tryPlay, 100);
             }
           },
           onStateChange: (event: { data: number }) => {
