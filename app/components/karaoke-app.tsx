@@ -487,17 +487,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
-        <div className="host-setup" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-          <input
-            type="password"
-            placeholder="Enter the pin here"
-            value={hostPin}
-            onChange={(e) => setHostPin(e.target.value)}
-            aria-label="Host PIN"
-            style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,.18)", background: "rgba(0,0,0,.35)", color: "#fff", fontSize: 16, outline: "none" }}
-          />
-          <button className="button button-lime" onClick={createRoom} disabled={!serviceReady || !hostPin} style={{ padding: "10px 20px", fontSize: 16 }}><Mic2 size={17} /> Start a session</button>
-        </div>
+        <div className="host-setup"><div className="pin-card"><div className="pin-title"><span className="pin-eyebrow">HOST PIN</span><span className="pin-label">Enter the pin here</span></div><div className="pin-fields"><input type="password" value={hostPin} onChange={(e) => setHostPin(e.target.value)} autoComplete="off" aria-label="Host PIN" /><button className="button button-lime" onClick={createRoom} disabled={!serviceReady || !hostPin}><Mic2 size={17} /> Start session</button></div></div></div>
         {connected && !serviceReady && <p className="notice" role="status">Configure server settings, then refresh the page.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         <div className="free-note"><span /> Connected to database · no paid services</div>
