@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   requireSupabase();
   const body = await request.json();
   const sessionId = body.sessionId;
-  const nickname = body.nickname;
+  const nickname = body.guestName || body.nickname;
   if (!sessionId || !nickname || nickname.trim().length < 1) {
     return NextResponse.json({ error: 'Session ID and nickname are required.' }, { status: 400 });
   }
