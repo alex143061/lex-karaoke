@@ -341,7 +341,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
     return <main className="guest-shell">
       <header className="guest-header">
 <a className="brand" href="/"><span className="brand-mark"><Mic2 size={18} /></span><span>lex-karaoke</span></a>
-        <span className={`connection ${connected ? 'is-online' : ''}`}><span />{connected ? 'Live room' : 'Reconnecting'}</span>
+        <span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Supabase ready' : 'Supabase not configured'}</span>
       </header>
       {!joined ? <section className="join-panel">
         <div className="eyebrow"><Smartphone size={14} /> ROOM INVITE</div>
@@ -350,7 +350,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
         <form onSubmit={joinRoom} className="join-form">
           <label htmlFor="nickname">Your name</label>
           <input id="nickname" maxLength={24} placeholder="e.g. Jules" value={nickname} onChange={(event) => setNickname(event.target.value)} required />
-          <button className="button button-lime button-wide" disabled={!connected}><Mic2 size={17} /> Join the room</button>
+          <button className="button button-lime button-wide" disabled={!serviceReady}><Mic2 size={17} /> Join the room</button>
         </form>
         {connected && !serviceReady && <p className="notice" role="status">The host needs to configure its Supabase project before this room can be used.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
@@ -385,11 +385,11 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   return <main className="host-shell">
     <header className="host-header">
       <a className="brand" href="/"><span className="brand-mark"><Mic2 size={18} /></span><span>lex-karaoke</span></a>
-      <div className="header-meta"><span className={`connection ${connected ? 'is-online' : ''}`}><span />{connected ? 'Server connected' : 'Reconnecting'}</span>{snapshot && <span className="session-chip"><span className="live-pip" /> SESSION LIVE</span>}</div>
+      <div className="header-meta"><span className={`connection ${serviceReady ? 'is-online' : ''}`}><span />{serviceReady ? 'Supabase ready' : 'Supabase not configured'}</span></div>
     </header>
     {!snapshot ? <section className="welcome-stage">
       <div className="welcome-copy"><div className="eyebrow"><Disc3 size={14} /> YOUR LIVING ROOM, ON STAGE</div><h1>Make a night<br />of <em>every</em> song.</h1><p>Start a room, share the QR, and let the whole group build the setlist from their phones.</p>
-        <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!connected || !serviceReady}><Mic2 size={17} /> Start a session</button><label className="pin-input"><span>Host PIN</span><input type="password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="Only if configured" autoComplete="off" /></label></div>
+        <div className="host-setup"><button className="button button-lime" onClick={createRoom} disabled={!serviceReady}><Mic2 size={17} /> Start a session</button><label className="pin-input"><span>Host PIN</span><input type="password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="Only if configured" autoComplete="off" /></label></div>
         {connected && !serviceReady && <p className="notice" role="status">Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env, then restart the server.</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         <div className="free-note"><span /> Supabase Free database · no paid hosting</div>
