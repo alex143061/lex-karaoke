@@ -37,6 +37,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
   const playerNodeRef = useRef<HTMLDivElement>(null);
   const playerReadyRef = useRef(false);
   const currentVideoRef = useRef('');
+  const playedVideoRef = useRef(false); // true once we confirm the player is actually playing
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check server configuration status on mount
@@ -101,24 +102,41 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       .then(setQrData).catch(() => setQrData(''));
   }, [joinUrl]);
 
-  useEffect(() => {
-    if (mode !== 'host' || !snapshot?.current || !playerRef.current || !playerReadyRef.current) return;
-    const videoId = snapshot.current.videoId;
-    if (currentVideoRef.current !== videoId) {
+  // Centralized: load + play a video, retrying until YouTube confirms playing/buffering state.
+  const playVideoFor = (videoId: string) => {
+    if (!playerRef.current || !playerReadyRef.current) return;
+    // If it's the same video already loaded, just hit play.
+    if (currentVideoRef.current === videoId) {
+      playerRef.current.playVideo();
+      const state = playerRef.current.getPlayerState?.();
+      if (state === 1 || state === 3) {
+        playedVideoRef.current = true;
+        return;
+      }
+    } else {
       currentVideoRef.current = videoId;
       playerRef.current.loadVideoById(videoId);
-      // YouTube needs time after loadVideoById before playVideo will work.
-      // Retry up to 20 times (2 seconds) until the player reports playing state.
-      let attempts = 0;
-      const tryPlay = () => {
-        playerRef.current?.playVideo();
-        const state = playerRef.current?.getPlayerState?.();
-        if (state !== 1 && ++attempts < 20) {
-          setTimeout(tryPlay, 100);
-        }
-      };
-      setTimeout(tryPlay, 100);
     }
+    // Retry playVideo every 200ms, up to 50 tries (~10 seconds), until YT reports playing/buffering.
+    let attempts = 0;
+    const attempt = () => {
+      if (!playerRef.current || currentVideoRef.current !== videoId) return;
+      playerRef.current.playVideo();
+      const state = playerRef.current.getPlayerState?.();
+      if (state === 1 || state === 3) {
+        playedVideoRef.current = true;
+        return;
+      }
+      if (++attempts < 50) {
+        setTimeout(attempt, 200);
+      }
+    };
+    setTimeout(attempt, 200);
+  };
+
+  useEffect(() => {
+    if (mode !== 'host' || !snapshot?.current?.videoId) return;
+    playVideoFor(snapshot.current.videoId);
   }, [mode, snapshot?.current?.videoId]);
 
   useEffect(() => {
@@ -134,17 +152,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
             playerReadyRef.current = true;
             const videoId = snapshot?.current?.videoId;
             if (videoId && playerRef.current) {
-              currentVideoRef.current = videoId;
-              playerRef.current.loadVideoById(videoId);
-              let attempts = 0;
-              const tryPlay = () => {
-                playerRef.current?.playVideo();
-                const state = playerRef.current?.getPlayerState?.();
-                if (state !== 1 && ++attempts < 20) {
-                  setTimeout(tryPlay, 100);
-                }
-              };
-              setTimeout(tryPlay, 100);
+              playVideoFor(videoId);
             }
           },
           onStateChange: (event: { data: number }) => {
@@ -156,7 +164,9 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
                 body: JSON.stringify({ sessionId: snapshot.sessionId, token: hostToken, state }),
               }).catch(() => {});
             }
-            if (event.data === 0) {
+            // Only skip to next song when the video actually ended after playing.
+            // Prevents false skip during initial load/buffering when YT may fire state 0.
+            if (event.data === 0 && playedVideoRef.current) {
               fetch('/api/host/skip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -422,7 +432,7 @@ export default function KaraokeApp({ mode, sessionId: routeSessionId }: Props) {
       <div className="dashboard-grid">
         <section className="player-column">
           <div className="player-frame"><div ref={playerNodeRef} className="youtube-player" />{!current && <div className="player-placeholder"><div className="placeholder-disc"><Disc3 size={38} /></div><span>THE STAGE IS YOURS</span><strong>{queue.length ? 'Ready for the first song?' : 'Waiting for a request'}</strong><p>{queue.length ? 'Start the set when everyone is ready.' : 'Scan the room QR to add songs.'}</p></div>}</div>
-          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={() => current ? playerRef.current?.playVideo() : apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
+          <div className="current-track"><div className="track-status"><span className={snapshot.playbackState === 'playing' ? 'playing-dot' : 'paused-dot'} />{snapshot.playbackState === 'playing' ? 'NOW PLAYING' : current ? 'READY TO PLAY' : 'UP NEXT'}</div><div className="track-info"><strong>{current?.title || queue[0]?.title || 'No song selected'}</strong><span>{current?.channel || queue[0]?.channel || 'Add a request from a phone to get started'}</span></div><div className="player-controls"><button className="control-button primary-control" title={current ? 'Play' : 'Start next song'} aria-label={current ? 'Play' : 'Start next song'} onClick={() => current ? playVideoFor(current.videoId) : apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><Play size={17} fill="currentColor" /></button><button className="control-button" title="Pause" aria-label="Pause" onClick={() => playerRef.current?.pauseVideo()}><span className="pause-glyph">Ⅱ</span></button><button className="control-button" title="Skip song" aria-label="Skip song" onClick={() => apiCall('/api/host/skip', { sessionId: snapshot?.sessionId, token: hostToken })}><SkipForward size={18} /></button><button className="control-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => document.querySelector('.player-frame')?.requestFullscreen()}><Volume2 size={17} /></button></div></div>
           {notice && <div className="host-notice" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={14} /></button></div>}
         </section>
         <aside className="right-column">
